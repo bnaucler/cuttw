@@ -39,22 +39,18 @@ void rbuf(FILE *fp, char *buf, flag *f) {
 	free(sbuf);
 }
 
-int rempref(char *str) {
+void rempref(char *str) {
 
 	while(isspace(*str) || *str == '\n') str++;
-
-	return 0;
 }
 
 // Fix
-int remtail(char *str, char rem) {
+void remtail(char *str, char rem) {
 
 	char *eptr = str;
 	eptr += (strlen(str) - 1);
 
 	while(*eptr == rem) *eptr-- = 0;
-
-	return 0;
 }
 
 // TODO: get rid of unnecessary if-statement
@@ -92,8 +88,8 @@ int cuttw(tweet *head, char *buf, flag *f) {
 			dptr -= (TWLEN - TAILLEN) - lcut;
 			eptr -= (TWLEN - TAILLEN) - lcut;
 			hasp = lctr = *dptr = 0;
-			remtail(trav->txt, ' ');
 			rempref(trav->txt);
+			remtail(trav->txt, ' ');
 			remtail(trav->txt, '\n'); // TODO
 			trav->next = calloc(1, sizeof(tweet));
 			trav = trav->next;
@@ -124,7 +120,7 @@ int prdata(tweet *head, flag *f) {
 	return 0;
 }
 
-int execop(flag *f, int argc, char **argv) {
+int execop(flag *f, char **argv) {
 
 	char *buf = calloc(MXSZ, sizeof(char));
 	tweet *head = calloc(1, sizeof(tweet));
@@ -156,7 +152,6 @@ void setfl(char *oarg, flag *f) {
 	char *arg = oarg;
 
 	while(*++arg) {
-		printf("arg: %c\n", *arg);
 		switch(*arg) {
 
 			case 'p':
@@ -172,17 +167,13 @@ void setfl(char *oarg, flag *f) {
 
 int main(int argc, char **argv) {
 
-	if(argc < 2) return usage("No filename provided", 1);
-
 	flag *f = calloc(1, sizeof(flag));
 
-	if(argv[1][0] == '-') {
-		setfl(argv++[1], f);
-		argc--;
-	}
+	if(argc < 2) return usage("No filename provided", 1);
+	else if(argv[1][0] == '-') setfl(argv++[1], f);
 
-	if(argc < 1) return usage("No filename provided", 1);
-	else return execop(f, --argc, ++argv);
+	if(!argv[1]) return usage("No filename provided", 1);
+	else return execop(f, ++argv);
 
 	return 0;
 }
