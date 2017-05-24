@@ -2,7 +2,7 @@
 Cutting a text document into tweet sized chunks and adding a counter.
 
 ## Written by
-Björn Westerberg Nauclér 2017
+Björn Westerberg Nauclér (mail@bnaucler.se) 2017
 
 Tested on Arch Linux 4.10
 

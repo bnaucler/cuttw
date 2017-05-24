@@ -54,14 +54,13 @@ void remsp(char *str) {
 
 	char *ptr = str;
 	int len = strlen(str);
-	unsigned int ctr = 0;
 
 	while(isspace(*ptr) || *ptr == '\n') {
-		ctr++;
+		len--;
 		ptr++;
 	}
 
-	memmove(str, str + ctr, len - ctr);
+	memmove(str, ptr, len);
 
 	ptr = str + (strlen(str) - 1);
 
@@ -94,7 +93,9 @@ int cuttw(tweet *head, char *buf, const flag *f) {
 		if(f->pfl && (*eptr == '.' || *eptr == '!' || *eptr == '?')) {
 			hasp++;
 			lcut = lctr;
-		} else if(!hasp && isspace(*eptr)) lcut = lctr;
+		} else if(!hasp && isspace(*eptr)) {
+			lcut = lctr;
+		}
 
 		if(lctr > (TWLEN - TAILLEN)) {
 			dptr -= (TWLEN - TAILLEN) - lcut;
@@ -138,7 +139,8 @@ char *spstr(char *str, const int len) {
 
 // TODO:	odd termsize alignment
 //			varying alignment if numtw > 9
-char *mkhdr(char *str, char *box, const int boxsz, const int ctr,
+//			this whole function looks like crap
+char *mkhdr(char *str, char *hdr, const int hdrsz, const int ctr,
 	const int numtw, const flag *f) {
 
 	int sub = 7; // magic number (space taken by number + decoration)
@@ -152,19 +154,19 @@ char *mkhdr(char *str, char *box, const int boxsz, const int ctr,
 	for(a = 0; a < blen; a++) *ttrav++ = '-';
 
 	if(f->cfl)
-		snprintf(box, boxsz, RED "\n%c%s " WHT "(%d)" RED " %s%c\n" RESET "%s\n",
+		snprintf(hdr, hdrsz, RED "\n%c%s " WHT "(%d)" RED " %s%c\n" RESET "%s\n",
 				'+', tln, ctr, tln, '+', spstr(str, f->col));
 	else
-		snprintf(box, boxsz, "\n%c%s (%d) %s%c\n%s\n",
+		snprintf(hdr, hdrsz, "\n%c%s (%d) %s%c\n%s\n",
 				'+', tln, ctr, tln, '+', spstr(str, f->col));
 
 	free(tln);
-	return box;
+	return hdr;
 }
 
 int prdata(tweet *head, const int numtw, const flag *f) {
 
-	char *box = calloc(MBCH, sizeof(char));
+	char *hdr = calloc(MBCH, sizeof(char));
 	tweet *trav = head;
 	unsigned int ctr = 0;
 
@@ -172,15 +174,12 @@ int prdata(tweet *head, const int numtw, const flag *f) {
 		printf("DEBUG rows: %d, cols: %d\n\n", f->row, f->col);
 
 	while(ctr++ < numtw) {
-		if(f->dfl)
-			printf("%s", mkhdr(trav->txt, box, MBCH, ctr, numtw, f));
-		else
-			printf("%s\n\n", trav->txt);
-
+		if(f->dfl) printf("%s", mkhdr(trav->txt, hdr, MBCH, ctr, numtw, f));
+		else printf("%s\n\n", trav->txt);
 		trav = trav->next;
 	}
 
-	if(box) free(box);
+	if(hdr) free(hdr);
 	return 0;
 }
 
@@ -197,7 +196,7 @@ int execop(const flag *f, char **argv) {
 			return usage("Could not open file", 2);
 		} else {
 			rbuf(fp, buf);
-			if(!strlen(buf)) {
+			if(!buf[0]) {
 				if(f->vfl) fprintf(stderr, "%s: empty file\n", *argv);
 				continue;
 			} else if(f->vfl) printf("%s:\n", *argv);
@@ -211,6 +210,7 @@ int execop(const flag *f, char **argv) {
 
 	free(buf);
 	free(head);
+
 	return 0;
 }
 
