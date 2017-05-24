@@ -2,17 +2,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <termios.h>
+#include <sys/ioctl.h>
 
 #define VER "0.1"
 #define TWLEN 140
 #define TAILLEN 9
-#define MXSZ 4096
-#define SBCH 1024
+#define MXSZ 4096 // Should be enough for any sane twittrer
+#define MBCH 1024
+#define SBCH 256
 
 typedef struct flag {
-	int dfl; // text decoration? (not implemented)
+	int dfl; // text decoration
 	int pfl; // punctuation break flag
-	int vfl; // verbosity (not implemented)
+	int vfl; // verbosity
+	int row; // terminal rows
+	int col; // terminal columns
 } flag;
 
 typedef struct tweet {
@@ -20,7 +25,7 @@ typedef struct tweet {
 	struct tweet *next;
 } tweet;
 
-int usage(char *err, int ret) {
+int usage(char *err, const int ret) {
 
 	if(err) fprintf(stderr, "Error: %s\n", err);
 	printf("Usage: cuttw [-dpv] file\n"
@@ -30,11 +35,11 @@ int usage(char *err, int ret) {
 	return ret;
 }
 
-void rbuf(FILE *fp, char *buf, flag *f) {
+void rbuf(FILE *fp, char *buf, const flag *f) {
 
-	char *sbuf = calloc(SBCH, sizeof(char));
+	char *sbuf = calloc(MBCH, sizeof(char));
 
-	while(fgets(sbuf, MXSZ, fp)) strncat(buf, sbuf, SBCH);
+	while(fgets(sbuf, MXSZ, fp)) strncat(buf, sbuf, MBCH);
 
 	free(sbuf);
 }
@@ -45,7 +50,7 @@ void rempref(char *str) {
 }
 
 // Fix
-void remtail(char *str, char rem) {
+void remtail(char *str, const char rem) {
 
 	char *eptr = str;
 	eptr += (strlen(str) - 1);
@@ -54,7 +59,7 @@ void remtail(char *str, char rem) {
 }
 
 // TODO: get rid of unnecessary if-statement
-int addtail(tweet *head, int numtw) {
+int addtail(tweet *head, const int numtw) {
 
 	tweet *trav = head;
 	char *tail = calloc(TAILLEN + 1, sizeof(char));
@@ -72,7 +77,7 @@ int addtail(tweet *head, int numtw) {
 	return 0;
 }
 
-int cuttw(tweet *head, char *buf, flag *f) {
+int cuttw(tweet *head, char *buf, const flag *f) {
 
 	char *eptr = buf, *dptr = head->txt;
 	tweet *trav = head;
@@ -105,22 +110,71 @@ int cuttw(tweet *head, char *buf, flag *f) {
 	return numtw;
 }
 
-int prdata(tweet *head, flag *f) {
+char *spstr(char *str, const int len) {
 
+	char *eptr = str, *lptr = str;
+	int ctr = 0;
+
+	do {
+		if(isspace(*eptr)) lptr = eptr;
+		if(ctr >= len) {
+			*lptr = '\n';	
+			eptr = lptr + 1;
+			ctr = 0;
+		}
+		ctr++;
+	
+	} while(*++eptr);
+
+	return str;
+}
+
+// TODO:	odd termsize alignment
+//			color
+//			varying alignment if numtw > 9
+char *mkhdr(char *str, char *box, const int boxsz, const int ctr,
+	const int numtw, const flag *f) {
+
+	int sub = 7;
+	if(numtw > 9) sub += 2;
+
+	int blen = (f->col - sub) / 2;
+
+	char *tln = calloc(blen + 1, sizeof(char)), *ttrav = tln;
+	unsigned int a = 0;
+	
+	for(a = 0; a < blen; a++) *ttrav++ = '-';
+
+	snprintf(box, boxsz, "\n%c%s (%d) %s%c\n%s\n",
+			'+', tln, ctr, tln, '+', spstr(str, f->col)); // DEBUG
+
+	free(tln);
+	return box;
+}
+
+int prdata(tweet *head, const int numtw, const flag *f) {
+
+	char *box = calloc(MBCH, sizeof(char));
 	tweet *trav = head;
 	int ctr = 1;
 
-	// TODO: get rid of unnecessary if-statement
+	if(f->vfl > 1) printf("DEBUG rows: %d, cols: %d\n\n", f->row, f->col);
+
 	while(trav->txt) {
-		printf("%d: %s\n\n", ctr++, trav->txt);
+		if(f->dfl)
+			printf("%s", mkhdr(trav->txt, box, MBCH, ctr++, numtw, f));
+		else
+			printf("%s\n\n", trav->txt);
+
 		if(trav->next) trav = trav->next;
 		else break;
 	}
 
+	if(box) free(box);
 	return 0;
 }
 
-int execop(flag *f, char **argv) {
+int execop(const flag *f, char **argv) {
 
 	char *buf = calloc(MXSZ, sizeof(char));
 	tweet *head = calloc(1, sizeof(tweet));
@@ -130,12 +184,12 @@ int execop(flag *f, char **argv) {
 	do {
 		fp = fopen(*argv, "r");
 		if(!fp) {
-			return usage("Could not read file", 2);
+			return usage("Could not open file", 2);
 		} else {
 			rbuf(fp, buf, f);
 			numtw = cuttw(head, buf, f);
 			addtail(head, numtw);
-			prdata(head, f);
+			prdata(head, numtw, f);
 			fclose(fp);
 		}
 
@@ -147,12 +201,14 @@ int execop(flag *f, char **argv) {
 }
 
 // Cheap getopt
-void setfl(char *oarg, flag *f) {
-
-	char *arg = oarg;
+void setfl(char *arg, flag *f) {
 
 	while(*++arg) {
 		switch(*arg) {
+
+			case 'd':
+				f->dfl++;
+				break;
 
 			case 'p':
 				f->pfl++;
@@ -169,11 +225,19 @@ int main(int argc, char **argv) {
 
 	flag *f = calloc(1, sizeof(flag));
 
-	if(argc < 2) return usage("No filename provided", 1);
-	else if(argv[1][0] == '-') setfl(argv++[1], f);
+	if(argc < 2 || (argc == 2 && argv[1][0] == '-'))
+		return usage("No filename provided", 1);
+	else if
+		(argv[1][0] == '-') setfl(argv++[1], f);
 
-	if(!argv[1]) return usage("No filename provided", 1);
-	else return execop(f, ++argv);
+	if(f->dfl) {
+		struct winsize w;
+		ioctl(0, TIOCGWINSZ, &w);
+		f->row = w.ws_row;
+		f->col = w.ws_col;
+	}
+
+	return execop(f, ++argv);
 
 	return 0;
 }
